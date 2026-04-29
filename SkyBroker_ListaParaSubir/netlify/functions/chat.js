@@ -69,7 +69,7 @@ let replyText = result?.choices?.[0]?.message?.content || "Lo siento, mi conexi√
         // Borramos la etiqueta secreta del mensaje para no asustar al cliente
         replyText = replyText.replace(extractRegex, '').trim();
     }
-
+ replyText = replyText.replace(/\[SAVE_CONTACT:[^\]]*\]/gi, '').trim();
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
