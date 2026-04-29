@@ -1,7 +1,7 @@
 // Servidor Backend Inteligente (Netlify Function)
 // Modificado para recibir memoria (historial multihilo) inteligente.
 
-const GROQ_API_KEY = "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";
+const GROQ_API_KEY = "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";
 
 exports.handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
