@@ -45,8 +45,7 @@ EXTRA: Sé siempre breve (1 o 2 párrafos).`;
     });
 
     const result = await groqResponse.json();
-    let replyText = result?.choices?.[0]?.message?.content || "Lo siento, mi conexión cerebral no está funcionando ahora.";
-
+let replyText = result?.choices?.[0]?.message?.content || ("ERROR DE GROQ: " + JSON.stringify(result));
     // LÓGICA DE EXTRACCIÓN Y GUARDADO (Regex Detector)
     // Buscamos si la IA emitió nuestro código secreto [SAVE_CONTACT:DNI,PHONE]
     const extractRegex = /\[SAVE_CONTACT:([^,]+),([^\]]+)\]/i;
