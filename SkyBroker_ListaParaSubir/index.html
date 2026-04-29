@@ -36,6 +36,27 @@
         /* Ocultar barra de desplazamiento para un slider elegante */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Animación Escribiendo... */
+        .typing-dot {
+            animation: typing 1.4s infinite ease-in-out both;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Botón Latido (Handoff) */
+        .pulse-btn {
+            animation: pulse-soft 2s infinite;
+        }
+        @keyframes pulse-soft {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(37, 211, 102, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+        }
     </style>
     
     <!-- Configuración para que Tailwind reconozca las variables de colores y sean fáciles de cambiar -->
@@ -540,11 +561,34 @@
         const sendBtn = document.getElementById('send-btn');
         
         let chatHistory = [];
+        
+        // Sonido de notificación
+        const popSound = new Audio('data:audio/wav;base64,UklGRlIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YTEAAAAcHCkpMTM5O0BEQz9CNzIqKR0cAAAAAAAAAAAA');
+        popSound.volume = 0.5;
+
+        // Cargar memoria al iniciar
+        const savedHistory = localStorage.getItem('skybot_history');
+        if (savedHistory) {
+            try {
+                chatHistory = JSON.parse(savedHistory);
+                document.getElementById('quick-replies').style.display = 'none'; // ocultar botones iniciales
+                // Re-renderizar historial
+                chatHistory.forEach(msg => {
+                    if (msg.role !== 'system') {
+                        appendMessage(msg.content, msg.role === 'user', true);
+                    }
+                });
+            } catch (e) {
+                console.error("Error al cargar memoria:", e);
+                chatHistory = [];
+            }
+        }
+
         let interactionStarted = false;
 
-        // Animación de la Burbuja a los 8 segundos
+        // Burbuja proactiva a los 8s (si no hay interacción y no hay historial)
         setTimeout(() => {
-            if(chatWindow.classList.contains('hidden') && !interactionStarted) {
+            if (!interactionStarted && chatHistory.length === 0) {
                 const bubble = document.getElementById('proactive-bubble');
                 bubble.classList.remove('opacity-0', 'translate-y-4');
                 bubble.classList.add('opacity-100', 'translate-y-0');
@@ -559,6 +603,9 @@
             
             if (!chatWindow.classList.contains('hidden')) {
                 chatInput.focus();
+                setTimeout(() => {
+                   chatBody.scrollTop = chatBody.scrollHeight; 
+                }, 100);
             }
         });
 
@@ -576,16 +623,21 @@
             });
         });
 
-        // Parseador de Markdown a HTML (Para Handoff Botones)
+        // Parseador de Markdown a HTML
         function parseBotResponse(text) {
+             // 1. Reemplazar negritas
+             text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+             // 2. Reemplazar saltos de línea reales por br
+             text = text.replace(/\n/g, '<br>');
+             // 3. Reemplazar enlace estilo Markdown a Botón Whatsapp latiente
              const linkRegex = /\[([^\]]+)\]\((https:\/\/wa\.me[^\)]+)\)/g;
              if(linkRegex.test(text)) {
-                 return text.replace(linkRegex, '<br><a href="$2" target="_blank" class="inline-block mt-3 mb-1 bg-[#25D366] text-white font-bold py-2.5 px-4 rounded-xl shadow-md hover:opacity-90 transition-opacity whitespace-normal"><i class="fa-brands fa-whatsapp text-lg align-middle"></i> $1</a>');
+                 text = text.replace(linkRegex, '<br><a href="$2" target="_blank" class="pulse-btn inline-block mt-3 mb-1 bg-[#25D366] text-white font-bold py-2.5 px-4 rounded-xl shadow-md hover:bg-green-600 transition-colors whitespace-normal"><i class="fa-brands fa-whatsapp text-lg align-middle"></i> $1</a>');
              }
              return text;
         }
 
-        function appendMessage(text, isUser = false) {
+        function appendMessage(text, isUser = false, isSilentLoad = false) {
             const msgDiv = document.createElement('div');
             msgDiv.className = isUser ? 'flex justify-end' : 'flex justify-start';
             const bubble = document.createElement('div');
@@ -593,10 +645,13 @@
                 ? 'bg-primary text-white text-sm px-4 py-3 rounded-2xl rounded-tr-none shadow-sm max-w-[85%] leading-relaxed' 
                 : 'bg-white border border-gray-200 text-gray-700 text-sm px-4 py-3 rounded-2xl rounded-tl-none shadow-sm max-w-[85%] leading-relaxed whitespace-pre-wrap';
             
-            // Si es bot, permitimos inyectar nuestro botón HTML
+            // Si es bot, permitimos inyectar nuestro botón HTML y parseo Markdown
             if(!isUser) {
                 bubble.innerHTML = parseBotResponse(text);
-                bubble.classList.remove('whitespace-pre-wrap');
+                bubble.classList.remove('whitespace-pre-wrap'); // porque usamos <br> ahora
+                if (!isSilentLoad) {
+                    try { popSound.play(); } catch(e){}
+                }
             } else {
                 bubble.textContent = text;
             }
@@ -618,12 +673,17 @@
 
             document.getElementById('quick-replies').style.display = 'none';
             chatHistory.push({ role: 'user', content: text });
+            localStorage.setItem('skybot_history', JSON.stringify(chatHistory));
 
             const loadingId = 'loading-' + Date.now();
             const loadingMsgDiv = document.createElement('div');
             loadingMsgDiv.id = loadingId;
             loadingMsgDiv.className = 'flex justify-start';
-            loadingMsgDiv.innerHTML = `<div class="bg-white border border-gray-200 text-gray-400 text-sm px-4 py-3 rounded-2xl rounded-tl-none shadow-sm max-w-[85%]"><i class="fa-solid fa-circle-notch fa-spin"></i> Escribiendo...</div>`;
+            loadingMsgDiv.innerHTML = `<div class="bg-white border border-gray-200 text-gray-400 text-sm px-4 py-3 rounded-2xl rounded-tl-none shadow-sm max-w-[85%] flex items-center gap-1">
+                <div class="typing-dot w-2 h-2 bg-gray-400 rounded-full"></div>
+                <div class="typing-dot w-2 h-2 bg-gray-400 rounded-full"></div>
+                <div class="typing-dot w-2 h-2 bg-gray-400 rounded-full"></div>
+            </div>`;
             messagesContainer.appendChild(loadingMsgDiv);
             chatBody.scrollTop = chatBody.scrollHeight;
 
@@ -654,6 +714,7 @@
                 const replyText = result.reply || "Problemas al obtener respuesta de la IA.";
 
                 chatHistory.push({ role: 'assistant', content: replyText });
+                localStorage.setItem('skybot_history', JSON.stringify(chatHistory));
                 appendMessage(replyText, false);
 
             } catch (error) {

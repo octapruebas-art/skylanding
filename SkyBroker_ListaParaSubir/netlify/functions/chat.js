@@ -1,7 +1,7 @@
 // Servidor Backend Inteligente (Netlify Function)
 // Modificado para recibir memoria (historial multihilo) inteligente.
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_KEY = "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";
 
 exports.handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
@@ -12,17 +12,21 @@ exports.handler = async (event, context) => {
     const data = JSON.parse(event.body);
     const { history } = data; // Array: [{role: 'user', content: '...'}, {role: 'assistant', ...}]
 
-    const systemPrompt = `Eres el asistente virtual "SkyBot" de Sky Broker, un Productor Asesor de Seguros experto en Argentina, Mar del Plata.
-Hablas en perfecto español rioplatense (tuteas / voseas con respeto). Eres cortés y servicial.
-DIRECTIVAS SECUENCIALES OBLIGATORIAS (Sigue el orden paso a paso):
-PASO 1: Si apenas comienza la charla, tu primer objetivo es siempre preguntar el DNI o Cédula del usuario.
-PASO 2: Cuando el usuario te dé su DNI, agradécele y pídele un Teléfono Celular de contacto.
-PASO 3: Cuando tengas grabado en tu memoria AMBOS DATOS (DNI y Teléfono), DEBES generar la siguiente etiqueta oculta exactamente en este formato al final de tu respuesta: [SAVE_CONTACT:su_dni,su_telefono]
-PASO 4: Inmediatamente pregúntale qué Marca, Modelo y Año de vehículo (o zona/m2 si es Hogar) quiere cotizar.
-PASO 5: NUNCA inventes precios exactos bajo ningún caso.
-PASO 6: HANDOFF. Cuando ya tengas los datos de su vehículo y veas interés real, imprímele este botón exacto sin fallar:
+    const systemPrompt = `Eres "SkyBot", un asesor virtual premium de Sky Broker, expertos en seguros en Argentina.
+Hablas en perfecto español rioplatense (voseo profesional, empatía y calidez). Eres un "Closer" de ventas.
+
+ESTRATEGIA DE VENTAS (SIGUE ESTOS PASOS ESTRICTAMENTE EN ORDEN):
+PASO 1 (Enganche): Si el usuario saluda o pide cotizar, NO pidas datos personales. Pregúntale primero QUÉ quiere asegurar. Si es auto, pídele Marca, Modelo y Año.
+PASO 2 (Valor y Compromiso): Una vez que da los detalles del auto/hogar, muestra interés genuino. Dile que estás filtrando las mejores opciones (La Caja, Sancor, Rivadavia).
+PASO 3 (Captura de Lead): En ese mismo mensaje, dile: "Para enviarte las cotizaciones por WhatsApp, ¿me confirmarías tu número de celular y tu DNI?".
+PASO 4 (Guardado): SOLO cuando tengas AMBOS DATOS (DNI y Teléfono), genera esta etiqueta oculta al final de tu respuesta: [SAVE_CONTACT:su_dni,su_telefono]
+PASO 5 (Cierre): Luego de recibir los datos, imprímele SIEMPRE este botón exacto para cerrar la venta:
 [Hablar con un asesor ahora](https://wa.me/5492233544868?text=Hola,%20ya%20habl%C3%A9%20con%20el%20chatbot%20y%20quiero%20seguir%20con%20mi%20cotizaci%C3%B3n)
-EXTRA: Sé siempre breve (1 o 2 párrafos).`;
+
+REGLAS DE ORO:
+- NUNCA inventes precios exactos.
+- NUNCA pidas DNI ni celular en tu primer mensaje.
+- Usa negritas (**texto**) para resaltar conceptos clave.`;
 
     // Armamos el array final inyectando la regla maestra de sistema al principio
     const apiMessages = [
@@ -30,7 +34,7 @@ EXTRA: Sé siempre breve (1 o 2 párrafos).`;
         ...(history || [])
     ];
 
-    // Procesamos con Llama 3 de Meta (Groq API)
+    // Procesamos con Llama 3.1 de Meta (Groq API)
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -38,15 +42,16 @@ EXTRA: Sé siempre breve (1 o 2 párrafos).`;
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-model: "llama-3.1-8b-instant",
+        model: "llama-3.1-8b-instant", 
         temperature: 0.7,
         messages: apiMessages
       })
     });
 
     const result = await groqResponse.json();
-let replyText = result?.choices?.[0]?.message?.content || "Lo siento, mi conexión cerebral no está funcionando ahora.";    // LÓGICA DE EXTRACCIÓN Y GUARDADO (Regex Detector)
-    // Buscamos si la IA emitió nuestro código secreto [SAVE_CONTACT:DNI,PHONE]
+    let replyText = result?.choices?.[0]?.message?.content || "Lo siento, mi conexión cerebral no está funcionando ahora.";
+
+    // LÓGICA DE EXTRACCIÓN Y GUARDADO (Regex Detector)
     const extractRegex = /\[SAVE_CONTACT:([^,]+),([^\]]+)\]/i;
     const match = replyText.match(extractRegex);
     
@@ -54,7 +59,6 @@ let replyText = result?.choices?.[0]?.message?.content || "Lo siento, mi conexi�
         const extractedDNI = match[1].trim();
         const extractedPhone = match[2].trim();
         
-        // Disparamos la grabación silenciosa a Google Sheets (Forms)
         try {
             const formData = new URLSearchParams();
             formData.append('entry.474290538', extractedDNI);
@@ -65,11 +69,11 @@ let replyText = result?.choices?.[0]?.message?.content || "Lo siento, mi conexi�
                 body: formData.toString()
             }).catch(e => {}); 
         } catch (e) {}
-
-        // Borramos la etiqueta secreta del mensaje para no asustar al cliente
-        replyText = replyText.replace(extractRegex, '').trim();
     }
- replyText = replyText.replace(/\[SAVE_CONTACT:[^\]]*\]/gi, '').trim();
+
+    // Borrador universal: elimina cualquier etiqueta mal formada para que el cliente nunca la vea
+    replyText = replyText.replace(/\[SAVE_CONTACT:[^\]]*\]/gi, '').trim();
+
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
